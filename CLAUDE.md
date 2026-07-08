@@ -68,6 +68,11 @@ cluster) holding a copy of real legacy data.
 
 ## Status
 
-Foundation complete (read-only role + test DB). **Phase 0 next**: SvelteKit
-scaffold, vendored `@calyx/money`, Kysely read-only pool, health route hitting
-`pos.invoices`. Track progress against the `README.md` roadmap.
+Foundation + **Phase 0 complete**: SvelteKit (Node adapter) scaffold, vendored
+`@calyx/money` (`src/lib/money/`), read-only Kysely `pg` pool (`src/lib/server/`
+— `default_transaction_read_only=on`; `date` OID parsed as raw string to keep
+`financial_date` timezone-safe), hand-written schema types for `pos.invoices` /
+`pos.invoiceitems`, and `/api/health` verified against the test DB (109 invoices,
+€ 1.497,10). Run: `pnpm dev` / `pnpm check` / `pnpm test` / `pnpm build`.
+**Phase 1 next** (aggregation engine). Track progress against the `README.md`
+roadmap.

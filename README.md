@@ -63,10 +63,10 @@ first** — the custom query builder comes after the end-to-end pipeline is prov
 - [x] **Foundation** — read-only DB role (`setup-readonly-role.sql`) and an
       isolated test database (see [`testdb/`](./testdb/README.md)) holding a copy
       of real legacy data.
-- [ ] **Phase 0 — Scaffold & connection.** SvelteKit + Node adapter, vendored
+- [x] **Phase 0 — Scaffold & connection.** SvelteKit + Node adapter, vendored
       `@calyx/money`, Kysely `pg` pool on the read-only URL, hand-written types
-      for the `pos.*` tables in use, and a health route that queries
-      `pos.invoices` to prove the app→DB path.
+      for the `pos.*` tables in use, and a health route (`/api/health`) that
+      queries `pos.invoices` to prove the app→DB path.
 - [ ] **Phase 1 — Aggregation engine.** Filters (`financial_date` range, exclude
       training/storno), fetch invoices + items, and compute totals / tax-by-rate /
       payment-by-column breakdowns through `Money`, with recursive multi-level
@@ -101,3 +101,45 @@ postgresql://calyx_readonly:readonly_test@127.0.0.1:5433/Earthrise_DB_test
 
 See [`testdb/README.md`](./testdb/README.md) for details and how to refresh the
 data from a source database.
+
+### Phase 0 — Scaffold & connection
+
+The application shell and the read-only app→DB path are in place and verified.
+
+**Commands** (uses `pnpm`):
+
+```bash
+pnpm install     # install dependencies
+pnpm dev         # run the dev server (Vite)
+pnpm build       # production build (Node adapter)
+pnpm check       # svelte-check typecheck
+pnpm test        # Vitest (run once)
+```
+
+**What was built:**
+
+- **SvelteKit** standalone with the **Node adapter** (`svelte.config.js`) — a
+  minimal `+page.svelte` UI and `+server.ts` API routes.
+- **Vendored [`@calyx/money`](./src/lib/money/)** — the currency value object
+  copied verbatim from the Calyx v2 monorepo (with its test suite). All money is
+  parsed from DB decimal strings via `Money.fromDecimalString(...)`; raw-number
+  currency math is never used. See [`src/lib/money/VENDOR.md`](./src/lib/money/VENDOR.md).
+- **Read-only Kysely `pg` pool** ([`src/lib/server/db.ts`](./src/lib/server/db.ts))
+  on the read-only connection string. Writes are blocked at three layers: the
+  `calyx_readonly` role, `default_transaction_read_only=on` on every session, and
+  code that only ever `SELECT`s. PostgreSQL `date` columns are parsed as raw
+  `'YYYY-MM-DD'` strings so `financial_date` (the business-day grouping key) is
+  never shifted by timezone conversion.
+- **Hand-written schema types** ([`src/lib/server/schema.ts`](./src/lib/server/schema.ts))
+  for the `pos.invoices` and `pos.invoiceitems` columns in use — an intentionally
+  partial map that grows with later phases. `numeric` columns are typed as
+  `string` so they can only be consumed through `Money`.
+- **Structured logging** ([`src/lib/server/log.ts`](./src/lib/server/log.ts)) via
+  `pino` (context object first, message second).
+- **Health route** [`/api/health`](./src/routes/api/health/+server.ts) — queries
+  `pos.invoices` and sums `total` through `Money`, proving the full app→DB path.
+  Verified against the test database: **109 invoices**, total **€ 1.497,10**,
+  financial-date span **2025-09-22 → 2026-07-01**.
+
+Configuration lives in the environment (see [`.env.example`](./.env.example)):
+`DATABASE_URL` (defaults to the local test cluster if unset) and `LOG_LEVEL`.
