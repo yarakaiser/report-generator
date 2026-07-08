@@ -1,0 +1,17 @@
+# --- Test database cluster (native PG18) — never commit cluster data or dumps ---
+/testdb/pgdata/
+/testdb/pg.log
+/testdb/.s.PGSQL.*
+/testdb/*.dump
+
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+
+# --- Node ---
+node_modules/
+.svelte-kit/
+build/
+dist/
+/testdb/*.err
