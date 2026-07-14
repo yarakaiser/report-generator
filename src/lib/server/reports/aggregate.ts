@@ -44,7 +44,7 @@ export interface PaymentBreakdown {
 export interface Aggregate {
   /** Number of invoices contributing to this aggregate. */
   invoiceCount: number;
-  /** Grand total incl. VAT (equals the sum of invoice `total` for valid data). */
+  /** Grand total incl. VAT — the sum of invoice `total` (brutto). */
   gross: Money;
   /** Grand total excl. VAT. */
   net: Money;
@@ -130,12 +130,10 @@ export function computeInvoiceAggregate({ invoice, items }: InvoiceWithItems): A
   }
 
   const taxByRate: TaxRateBucket[] = [];
-  let gross = Money.zero();
   let net = Money.zero();
   let vat = Money.zero();
   for (const [ratePercent, rateGross] of grossByRate) {
     const breakdown = rateGross.extractTax(ratePercent);
-    gross = gross.add(rateGross);
     net = net.add(breakdown.net);
     vat = vat.add(breakdown.vat);
     // Skip rate buckets with zero gross (e.g. only free items at that rate) —
@@ -147,8 +145,11 @@ export function computeInvoiceAggregate({ invoice, items }: InvoiceWithItems): A
   taxByRate.sort((a, b) => b.ratePercent - a.ratePercent);
 
   return {
+    // Brutto is the authoritative invoice total (price), not the sum of line
+    // gross — robust when items don't fully reconcile. For valid data the two
+    // are equal, so gross = net + vat still holds.
     invoiceCount: 1,
-    gross,
+    gross: Money.fromDecimalString(invoice.total),
     net,
     vat,
     taxByRate,
