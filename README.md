@@ -68,10 +68,11 @@ first** — the custom query builder comes after the end-to-end pipeline is prov
       `decimal.js`-backed `Money`, Kysely `pg` pool on the read-only URL, hand-written types
       for the `pos.*` tables in use, and a health route (`/api/health`) that
       queries `pos.invoices` to prove the app→DB path.
-- [ ] **Phase 1 — Aggregation engine.** Filters (`financial_date` range, exclude
+- [x] **Phase 1 — Aggregation engine.** Filters (`financial_date` range, exclude
       training/storno), fetch invoices + items, and compute totals / tax-by-rate /
       payment-by-column breakdowns through `Money`, with recursive multi-level
-      grouping. Unit-tested against real rows.
+      grouping (`day` / `month` / `year` / `operator`). Unit-tested against real
+      rows. (Category/article grouping deferred to Phase 2.)
 - [ ] **Phase 2 — Preset reports.** Daily (by payment method), Monthly (by day),
       Yearly (by month), Article (category → article), Payment (method → operator),
       Operator (operator → day).
@@ -145,3 +146,43 @@ pnpm test        # Vitest (run once)
 
 Configuration lives in the environment (see [`.env.example`](./.env.example)):
 `DATABASE_URL` (defaults to the local test cluster if unset) and `LOG_LEVEL`.
+
+### Phase 1 — Aggregation engine
+
+The read-only computation core, in [`src/lib/server/reports/`](./src/lib/server/reports/),
+built and unit-tested against real rows from the test cluster.
+
+**What was built:**
+
+- **Filter + fetch layer** ([`query.ts`](./src/lib/server/reports/query.ts),
+  [`types.ts`](./src/lib/server/reports/types.ts)) — a `ReportFilter`
+  (`financial_date` range, `excludeTraining`, `excludeStorno`) and
+  `fetchInvoices` / `fetchInvoicesWithItems`. `excludeStorno` drops the reversal
+  invoices (`storno_source IS NOT NULL`) and keeps the original (matches Calyx
+  v2). Explicit column lists avoid pulling heavy legacy columns.
+- **Aggregation** ([`aggregate.ts`](./src/lib/server/reports/aggregate.ts)) —
+  turns a set of invoices-with-items into **gross / net / vat** totals, a
+  **VAT-by-rate** breakdown, and a **payment-method** breakdown, all through
+  `Money`. Three legacy-data rules are baked in:
+  - **Gross (brutto)** is the invoice `total` — the authoritative price.
+  - **VAT is extracted per invoice, per rate** (group that invoice's lines by
+    `taxpercent`, sum, split once) — this reproduces the POS's own
+    `vat` / `nettoprice` figures exactly (0 of 109 invoices differ).
+  - **Rollup lines are dropped** (`article_id = -5`, the synthetic
+    "Lieferschein …" delivery-note subtotal lines) so collective invoices don't
+    double-count. Genuine 0 % detail (e.g. `Pfand` deposits, `article_id = -8`)
+    is kept.
+  - **Payments use a booked-revenue basis** — over-tendered cash change
+    (`Σpayments − total`) is subtracted from `payment_bar`, so each invoice's
+    payments reconcile to its `total` (the `amount_retour` column is unreliable).
+- **Recursive grouping** ([`group.ts`](./src/lib/server/reports/group.ts)) —
+  `groupBy(rows, dimensions)` partitions invoices by an ordered list of
+  dimensions into a tree, with a full aggregate at every node and a grand total;
+  a parent always equals the sum of its children. Invoice-level dimensions ship
+  now: `byDay`, `byMonth`, `byYear`, `byOperator`. (Category / article grouping
+  is item-level and comes in Phase 2.)
+
+Verified against the test database: grand totals **gross € 1.497,10 / net
+€ 1.262,00 / vat € 235,10**, VAT rates **20 % / 10 % / 0 %**, payments **cash
+€ 1.209,90 / debit € 169,90 / credit € 117,30** — all reconciling three ways
+(gross = net + vat = Σtotal = Σpayments).

@@ -78,5 +78,15 @@ Foundation + **Phase 0 complete**: SvelteKit (Node adapter) scaffold,
 `financial_date` timezone-safe), hand-written schema types for `pos.invoices` /
 `pos.invoiceitems`, and `/api/health` verified against the test DB (109 invoices,
 € 1.497,10). Run: `pnpm dev` / `pnpm check` / `pnpm test` / `pnpm build`.
-**Phase 1 next** (aggregation engine). Track progress against the `README.md`
-roadmap.
+
+**Phase 1 complete** (aggregation engine, `src/lib/server/reports/`):
+`ReportFilter` + `fetchInvoices`/`fetchInvoicesWithItems` (`query.ts`);
+`aggregate()` (`aggregate.ts`) → gross (from invoice `total`) / net / vat /
+tax-by-rate / payment breakdown, all via `Money`; `groupBy()` (`group.ts`)
+recursive multi-level grouping with `byDay`/`byMonth`/`byYear`/`byOperator`.
+Key rules baked in: drop `article_id = -5` "Lieferschein" rollup lines before
+aggregating; extract VAT **per invoice, per rate** (reproduces POS
+`vat`/`nettoprice` exactly); payments on a **booked-revenue basis** (subtract
+over-tendered change `Σpayments − total` from `payment_bar`). 43 tests green.
+**Phase 2 next** (preset reports + category/article item-level grouping). Track
+progress against the `README.md` roadmap.
