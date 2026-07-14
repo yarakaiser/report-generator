@@ -38,9 +38,10 @@ The tool reads the **legacy** Calyx POS schema (`pos.*`, `posreporting.*`,
 | Operator | `invoices.username` (text) |
 | Category | by `categoryname` (via `pos.categorysort`) |
 
-All monetary values are handled through the `@calyx/money` value object
-(integer-cents `Money`, parsed from DB decimals with `Money.fromDecimalString`) —
-raw `number` arithmetic on currency is never used.
+All monetary values are handled through a `decimal.js`-backed `Money` value
+object (holds a `Decimal` in euros matching `numeric(10,2)`, parsed from DB
+decimals with `Money.fromDecimalString`) — raw `number` arithmetic on currency
+is never used.
 
 ## Tech stack
 
@@ -50,7 +51,7 @@ raw `number` arithmetic on currency is never used.
 | App framework | **SvelteKit** (standalone, Node adapter) — `+server.ts` routes are the backend, `+page.svelte` is the UI |
 | Database access | **Kysely** (type-safe SQL query builder), **read-only** |
 | Database | PostgreSQL (legacy Calyx POS schema) |
-| Money | `@calyx/money` (vendored) + `decimal.js` |
+| Money | `decimal.js`-backed `Money` value object (`src/lib/money/`) |
 | Rendering | HTML/CSS templates → **Puppeteer** (headless Chromium) → PDF |
 | Printing | PDF → OS print queue (**CUPS**) for both 80mm and A4 |
 | Testing | Vitest |
@@ -64,7 +65,7 @@ first** — the custom query builder comes after the end-to-end pipeline is prov
       isolated test database (see [`testdb/`](./testdb/README.md)) holding a copy
       of real legacy data.
 - [x] **Phase 0 — Scaffold & connection.** SvelteKit + Node adapter, vendored
-      `@calyx/money`, Kysely `pg` pool on the read-only URL, hand-written types
+      `decimal.js`-backed `Money`, Kysely `pg` pool on the read-only URL, hand-written types
       for the `pos.*` tables in use, and a health route (`/api/health`) that
       queries `pos.invoices` to prove the app→DB path.
 - [ ] **Phase 1 — Aggregation engine.** Filters (`financial_date` range, exclude
@@ -120,10 +121,11 @@ pnpm test        # Vitest (run once)
 
 - **SvelteKit** standalone with the **Node adapter** (`svelte.config.js`) — a
   minimal `+page.svelte` UI and `+server.ts` API routes.
-- **Vendored [`@calyx/money`](./src/lib/money/)** — the currency value object
-  copied verbatim from the Calyx v2 monorepo (with its test suite). All money is
-  parsed from DB decimal strings via `Money.fromDecimalString(...)`; raw-number
-  currency math is never used. See [`src/lib/money/VENDOR.md`](./src/lib/money/VENDOR.md).
+- **[`Money`](./src/lib/money/) value object** — a `decimal.js`-backed currency
+  type holding a `Decimal` in euros (matching `numeric(10,2)`), quantized to 2 dp,
+  with tax extraction (`extractTax`/`addTax`) and de-AT formatting. All money is
+  parsed from DB decimal strings via `Money.fromDecimalString(...)`; raw `number`
+  currency math is never used.
 - **Read-only Kysely `pg` pool** ([`src/lib/server/db.ts`](./src/lib/server/db.ts))
   on the read-only connection string. Writes are blocked at three layers: the
   `calyx_readonly` role, `default_transaction_read_only=on` on every session, and

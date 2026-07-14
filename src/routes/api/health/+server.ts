@@ -6,8 +6,8 @@ import type { RequestHandler } from './$types';
 
 /**
  * Health check that proves the full app → Kysely → read-only DB path by
- * querying `pos.invoices`, and exercises the vendored `@calyx/money` by summing
- * `total` through `Money` (parsed from the numeric string via
+ * querying `pos.invoices`, and exercises the `Money` value object by summing
+ * `total` through it (parsed from the numeric string via
  * `Money.fromDecimalString`, never raw-number math — CLAUDE.md rule 2).
  */
 export const GET: RequestHandler = async () => {
@@ -30,7 +30,7 @@ export const GET: RequestHandler = async () => {
     log.debug(
       {
         invoiceCount,
-        totalCents: total.toCents(),
+        total: total.toString(),
         firstDay: stats.first_day,
         lastDay: stats.last_day,
       },
@@ -43,7 +43,7 @@ export const GET: RequestHandler = async () => {
       invoices: {
         count: invoiceCount,
         total: {
-          cents: total.toCents(),
+          amount: total.toString(),
           formatted: total.format(),
         },
         financialDateSpan: {

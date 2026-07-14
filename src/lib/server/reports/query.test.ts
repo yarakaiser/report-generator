@@ -23,10 +23,10 @@ describe('fetchInvoices', () => {
     expect(invoices).toHaveLength(109);
   });
 
-  it('sums total to 149710 cents (€ 1.497,10) through Money', async () => {
+  it('sums total to € 1.497,10 through Money', async () => {
     const invoices = await fetchInvoices(FULL_RANGE);
     const total = Money.sum(invoices.map((i) => Money.fromDecimalString(i.total)));
-    expect(total.toCents()).toBe(149710);
+    expect(total.toString()).toBe('1497.10');
   });
 
   it('orders by financial_date then invoice_id', async () => {
@@ -70,7 +70,7 @@ describe('fetchItemsForInvoices', () => {
     const items = await fetchItemsForInvoices(['4316']);
     expect(items).toHaveLength(6);
     const gross = Money.sum(items.map((it) => Money.fromDecimalString(it.article_price)));
-    expect(gross.toCents()).toBe(810);
+    expect(gross.toString()).toBe('8.10');
   });
 });
 

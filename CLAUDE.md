@@ -10,7 +10,7 @@ the full overview and phased roadmap.
 - **SvelteKit** standalone (Node adapter): `+server.ts` routes = backend,
   `+page.svelte` = UI
 - **Kysely** (type-safe SQL builder), **read-only** + `pg`
-- **`@calyx/money`** (vendored) + `decimal.js` for all currency
+- **`decimal.js`-backed `Money`** value object (`src/lib/money/`) for all currency
 - **Puppeteer** (headless Chromium) → PDF; **CUPS** print queue for 80mm + A4
 - **Vitest** for tests
 
@@ -19,12 +19,15 @@ the full overview and phased roadmap.
 1. **READ-ONLY DATABASE.** The tool must only `SELECT`. Never insert/update/
    delete/DDL against the POS database. Enforced by the `calyx_readonly` role,
    but code must never attempt writes either.
-2. **MONEY = `@calyx/money`, always.** Parse DB decimals with
-   `Money.fromDecimalString(...)`. Never do raw-number currency math — no
-   `x / 100`, `x * 100`, `Math.round(price*100)`, `.toFixed(2)` on currency, or
+2. **MONEY = the `decimal.js`-backed `Money` (`src/lib/money/`), always.** It
+   holds a `Decimal` in euros (matching `numeric(10,2)`), quantized to 2 dp — not
+   integer cents. Parse DB decimals with `Money.fromDecimalString(...)`. Never do
+   raw JS `number` currency math — no `x / 100`, `x * 100`,
+   `Math.round(price*100)`, `.toFixed(2)` on a raw number, or
    `Intl.NumberFormat(currency)` on a raw number. Arithmetic via `money.add()`,
-   `.subtract()`, `.multiply()`, `.divide()`, `Money.sum()`. Any non-`Money`
-   currency path is a blocking defect.
+   `.subtract()`, `.multiply()`, `.divide()`, `Money.sum()`; VAT via
+   `.extractTax(rate)` / `.addTax(rate)`. Any non-`Money` currency path is a
+   blocking defect.
 3. **No autonomous architecture/design decisions.** Ask the user. They prefer
    **conversational** clarification — one or two points at a time in text, not a
    big multi-question modal.
@@ -68,8 +71,9 @@ cluster) holding a copy of real legacy data.
 
 ## Status
 
-Foundation + **Phase 0 complete**: SvelteKit (Node adapter) scaffold, vendored
-`@calyx/money` (`src/lib/money/`), read-only Kysely `pg` pool (`src/lib/server/`
+Foundation + **Phase 0 complete**: SvelteKit (Node adapter) scaffold,
+`decimal.js`-backed `Money` value object (`src/lib/money/`), read-only Kysely
+`pg` pool (`src/lib/server/`
 — `default_transaction_read_only=on`; `date` OID parsed as raw string to keep
 `financial_date` timezone-safe), hand-written schema types for `pos.invoices` /
 `pos.invoiceitems`, and `/api/health` verified against the test DB (109 invoices,

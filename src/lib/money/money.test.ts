@@ -1,374 +1,147 @@
-import { describe, it, expect } from 'vitest';
-import { Money, type AustrianTaxRate } from './money.js';
+import { Decimal } from 'decimal.js';
+import { describe, expect, it } from 'vitest';
+import { Money } from './money';
 
-describe('Money', () => {
-  describe('creation', () => {
-    it('creates from integer cents', () => {
-      const m = Money.fromCents(1050);
-      expect(m.toCents()).toBe(1050);
-      expect(m.getCurrency()).toBe('EUR');
-    });
-
-    it('creates from decimal string with dot', () => {
-      const m = Money.fromDecimalString('10.50');
-      expect(m.toCents()).toBe(1050);
-    });
-
-    it('creates from decimal string with comma (German format)', () => {
-      const m = Money.fromDecimalString('10,50');
-      expect(m.toCents()).toBe(1050);
-    });
-
-    it('rejects non-integer cents', () => {
-      expect(() => Money.fromCents(10.5)).toThrow('integer');
-    });
-
-    it('creates zero money', () => {
-      const m = Money.zero();
-      expect(m.toCents()).toBe(0);
-      expect(m.isZero()).toBe(true);
-    });
+describe('Money — construction & parsing', () => {
+  it('parses a dot decimal string', () => {
+    expect(Money.fromDecimalString('8.40').toString()).toBe('8.40');
   });
 
-  describe('formatting', () => {
-    it('formats for Austrian locale', () => {
-      const m = Money.fromCents(1050);
-      const formatted = m.format('de-AT');
-      expect(formatted).toContain('10,50');
-      expect(formatted).toContain('€');
-    });
-
-    it('formats number only', () => {
-      const m = Money.fromCents(1050);
-      expect(m.formatNumber('de-AT')).toBe('10,50');
-    });
-
-    it('converts to string', () => {
-      const m = Money.fromCents(1050);
-      expect(m.toString()).toContain('EUR');
-    });
+  it('parses a comma decimal string (de-AT input)', () => {
+    expect(Money.fromDecimalString('8,40').toString()).toBe('8.40');
   });
 
-  describe('arithmetic', () => {
-    it('adds two amounts', () => {
-      const a = Money.fromCents(1000);
-      const b = Money.fromCents(250);
-      expect(a.add(b).toCents()).toBe(1250);
-    });
-
-    it('subtracts two amounts', () => {
-      const a = Money.fromCents(1000);
-      const b = Money.fromCents(250);
-      expect(a.subtract(b).toCents()).toBe(750);
-    });
-
-    it('multiplies by factor', () => {
-      const m = Money.fromCents(1000);
-      expect(m.multiply(2.5).toCents()).toBe(2500);
-    });
-
-    it('divides by divisor', () => {
-      const m = Money.fromCents(1000);
-      expect(m.divide(4).toCents()).toBe(250);
-    });
-
-    it('negates amount', () => {
-      const m = Money.fromCents(1000);
-      expect(m.negate().toCents()).toBe(-1000);
-    });
-
-    it('returns absolute value', () => {
-      const m = Money.fromCents(-1000);
-      expect(m.abs().toCents()).toBe(1000);
-    });
-
-    it('rejects operations between different currencies', () => {
-      const eur = Money.fromCents(1000, 'EUR');
-      const eur2 = Money.fromCents(500, 'EUR');
-      expect(() => eur.add(eur2)).not.toThrow();
-    });
-
-    it('rejects division by zero', () => {
-      const m = Money.fromCents(1000);
-      expect(() => m.divide(0)).toThrow('zero');
-    });
+  it('quantizes to 2 decimal places on construction (half-up)', () => {
+    expect(Money.fromDecimalString('8.405').toString()).toBe('8.41');
+    expect(Money.fromDecimalString('8.404').toString()).toBe('8.40');
   });
 
-  describe('rounding (ROUND_HALF_UP)', () => {
-    it('rounds 0.5 up', () => {
-      const m = Money.fromDecimalString('10.005');
-      expect(m.toCents()).toBe(1001);
-    });
-
-    it('rounds 0.4 down', () => {
-      const m = Money.fromDecimalString('10.004');
-      expect(m.toCents()).toBe(1000);
-    });
-
-    it('handles 1.005 correctly', () => {
-      const m = Money.fromDecimalString('1.005');
-      expect(m.toCents()).toBe(101);
-    });
-
-    it('rounds multiplication result', () => {
-      const m = Money.fromCents(333);
-      expect(m.multiply(3).toCents()).toBe(999);
-    });
+  it('builds from a Decimal', () => {
+    expect(Money.fromDecimal(new Decimal('1497.1')).toString()).toBe('1497.10');
   });
 
-  describe('comparison', () => {
-    it('checks equality', () => {
-      const a = Money.fromCents(1000);
-      const b = Money.fromCents(1000);
-      const c = Money.fromCents(500);
-      expect(a.equals(b)).toBe(true);
-      expect(a.equals(c)).toBe(false);
-    });
-
-    it('compares greater than', () => {
-      const a = Money.fromCents(1000);
-      const b = Money.fromCents(500);
-      expect(a.greaterThan(b)).toBe(true);
-      expect(b.greaterThan(a)).toBe(false);
-    });
-
-    it('compares less than', () => {
-      const a = Money.fromCents(500);
-      const b = Money.fromCents(1000);
-      expect(a.lessThan(b)).toBe(true);
-      expect(b.lessThan(a)).toBe(false);
-    });
-
-    it('checks positive/negative/zero', () => {
-      expect(Money.fromCents(100).isPositive()).toBe(true);
-      expect(Money.fromCents(-100).isNegative()).toBe(true);
-      expect(Money.fromCents(0).isZero()).toBe(true);
-    });
+  it('zero is 0.00', () => {
+    expect(Money.zero().toString()).toBe('0.00');
+    expect(Money.zero().isZero()).toBe(true);
   });
 
-  describe('Austrian tax extraction (Gross → Net)', () => {
-    it('extracts 20% tax correctly', () => {
-      const gross = Money.fromCents(12000);
-      const { net, vat, rate } = gross.extractTax(20);
+  it('exposes the underlying Decimal', () => {
+    expect(Money.fromDecimalString('8.40').toDecimal().equals(new Decimal('8.4'))).toBe(true);
+  });
+});
 
-      expect(rate).toBe(20);
-      expect(net.toCents()).toBe(10000);
-      expect(vat.toCents()).toBe(2000);
-      expect(net.add(vat).toCents()).toBe(gross.toCents());
-    });
-
-    it('extracts 13% tax correctly', () => {
-      const gross = Money.fromCents(11300);
-      const { net, vat } = gross.extractTax(13);
-
-      expect(net.toCents()).toBe(10000);
-      expect(vat.toCents()).toBe(1300);
-    });
-
-    it('extracts 10% tax correctly', () => {
-      const gross = Money.fromCents(11000);
-      const { net, vat } = gross.extractTax(10);
-
-      expect(net.toCents()).toBe(10000);
-      expect(vat.toCents()).toBe(1000);
-    });
-
-    it('handles 0% tax rate', () => {
-      const gross = Money.fromCents(10000);
-      const { net, vat } = gross.extractTax(0);
-
-      expect(net.toCents()).toBe(10000);
-      expect(vat.toCents()).toBe(0);
-    });
-
-    it('handles rounding edge case', () => {
-      const gross = Money.fromCents(999);
-      const { net, vat, gross: g } = gross.extractTax(20);
-
-      expect(net.add(vat).toCents()).toBe(g.toCents());
-    });
-
-    it('rejects invalid tax rates', () => {
-      const m = Money.fromCents(1000);
-      expect(() => m.extractTax(19 as AustrianTaxRate)).toThrow('Invalid');
-    });
+describe('Money — arithmetic', () => {
+  it('adds and subtracts', () => {
+    const a = Money.fromDecimalString('4.60');
+    const b = Money.fromDecimalString('5.00');
+    expect(a.add(b).toString()).toBe('9.60');
+    expect(b.subtract(a).toString()).toBe('0.40');
   });
 
-  describe('Austrian tax addition (Net → Gross)', () => {
-    it('adds 20% tax correctly', () => {
-      const net = Money.fromCents(10000);
-      const { gross, vat, rate } = net.addTax(20);
-
-      expect(rate).toBe(20);
-      expect(gross.toCents()).toBe(12000);
-      expect(vat.toCents()).toBe(2000);
-    });
-
-    it('adds 13% tax correctly', () => {
-      const net = Money.fromCents(10000);
-      const { gross, vat } = net.addTax(13);
-
-      expect(gross.toCents()).toBe(11300);
-      expect(vat.toCents()).toBe(1300);
-    });
-
-    it('adds 10% tax correctly', () => {
-      const net = Money.fromCents(10000);
-      const { gross, vat } = net.addTax(10);
-
-      expect(gross.toCents()).toBe(11000);
-      expect(vat.toCents()).toBe(1000);
-    });
-
-    it('handles 0% tax rate', () => {
-      const net = Money.fromCents(10000);
-      const { gross, vat } = net.addTax(0);
-
-      expect(gross.toCents()).toBe(10000);
-      expect(vat.toCents()).toBe(0);
-    });
+  it('multiplies by a quantity', () => {
+    expect(Money.fromDecimalString('2.70').multiply(3).toString()).toBe('8.10');
+    expect(Money.fromDecimalString('2.70').multiply('2.5').toString()).toBe('6.75');
   });
 
-  describe('sum', () => {
-    it('sums array of money', () => {
-      const amounts = [Money.fromCents(100), Money.fromCents(200), Money.fromCents(300)];
-      expect(Money.sum(amounts).toCents()).toBe(600);
-    });
-
-    it('returns zero for empty array', () => {
-      expect(Money.sum([]).toCents()).toBe(0);
-    });
+  it('divides, rounding half-up to the currency scale', () => {
+    expect(Money.fromDecimalString('10.00').divide(3).toString()).toBe('3.33');
   });
 
-  describe('allocation', () => {
-    it('allocates by ratios', () => {
-      const m = Money.fromCents(100);
-      const [a, b, c] = m.allocate([1, 1, 1]);
-
-      expect(a.toCents() + b.toCents() + c.toCents()).toBe(100);
-    });
-
-    it('handles uneven splits with remainder', () => {
-      const m = Money.fromCents(100);
-      const [a, b, c] = m.allocate([1, 1, 1]);
-
-      const total = a.toCents() + b.toCents() + c.toCents();
-      expect(total).toBe(100);
-    });
-
-    it('rejects empty ratios', () => {
-      const m = Money.fromCents(100);
-      expect(() => m.allocate([])).toThrow();
-    });
+  it('throws on divide by zero', () => {
+    expect(() => Money.fromDecimalString('1.00').divide(0)).toThrow(/divide by zero/);
   });
 
-  describe('serialization', () => {
-    it('converts to JSON', () => {
-      const m = Money.fromCents(1050);
-      const json = m.toJSON();
-
-      expect(json).toEqual({ cents: 1050, currency: 'EUR' });
-    });
-
-    it('creates from JSON', () => {
-      const m = Money.fromJSON({ cents: 1050, currency: 'EUR' });
-
-      expect(m.toCents()).toBe(1050);
-      expect(m.getCurrency()).toBe('EUR');
-    });
+  it('negates and takes absolute value', () => {
+    expect(Money.fromDecimalString('4.60').negate().toString()).toBe('-4.60');
+    expect(Money.fromDecimalString('-4.60').abs().toString()).toBe('4.60');
   });
 
-  describe('edge cases', () => {
-    it('handles large amounts (10 million euros)', () => {
-      const m = Money.fromCents(1_000_000_000);
-      expect(m.toCents()).toBe(1_000_000_000);
-      expect(m.multiply(2).toCents()).toBe(2_000_000_000);
-    });
+  it('sums an array (zero for empty)', () => {
+    const sum = Money.sum(['4.60', '5.00', '2.70'].map((v) => Money.fromDecimalString(v)));
+    expect(sum.toString()).toBe('12.30');
+    expect(Money.sum([]).toString()).toBe('0.00');
+  });
+});
 
-    it('handles very large amounts near safe integer limit', () => {
-      const maxSafeCents = Math.floor(Number.MAX_SAFE_INTEGER / 100);
-      const m = Money.fromCents(maxSafeCents);
-      expect(m.toCents()).toBe(maxSafeCents);
-    });
+describe('Money — predicates & comparison', () => {
+  it('reports sign', () => {
+    expect(Money.fromDecimalString('4.60').isPositive()).toBe(true);
+    expect(Money.fromDecimalString('-4.60').isNegative()).toBe(true);
+    expect(Money.zero().isPositive()).toBe(false);
+  });
 
-    it('handles negative amounts', () => {
-      const m = Money.fromCents(-1000);
-      expect(m.isNegative()).toBe(true);
-      expect(m.abs().toCents()).toBe(1000);
-      expect(m.add(Money.fromCents(500)).toCents()).toBe(-500);
-    });
+  it('compares amounts', () => {
+    const a = Money.fromDecimalString('4.60');
+    const b = Money.fromDecimalString('5.00');
+    expect(a.lessThan(b)).toBe(true);
+    expect(b.greaterThan(a)).toBe(true);
+    expect(a.greaterThanOrEqual(a)).toBe(true);
+    expect(a.lessThanOrEqual(a)).toBe(true);
+    expect(a.equals(Money.fromDecimalString('4.60'))).toBe(true);
+  });
+});
 
-    it('handles negative amount tax extraction', () => {
-      const refund = Money.fromCents(-1200);
-      const { net, vat } = refund.extractTax(20);
-      expect(net.toCents()).toBe(-1000);
-      expect(vat.toCents()).toBe(-200);
-    });
+describe('Money — tax extraction (gross → net + vat)', () => {
+  it('extracts 20% VAT from a gross amount', () => {
+    const { gross, net, vat, rate } = Money.fromDecimalString('8.10').extractTax(20);
+    expect(gross.toString()).toBe('8.10');
+    expect(net.toString()).toBe('6.75');
+    expect(vat.toString()).toBe('1.35');
+    expect(rate).toBe(20);
+  });
 
-    it('handles very small decimal strings', () => {
-      const m = Money.fromDecimalString('0.01');
-      expect(m.toCents()).toBe(1);
-    });
+  it('extracts 10% VAT', () => {
+    const { net, vat } = Money.fromDecimalString('1.10').extractTax(10);
+    expect(net.toString()).toBe('1.00');
+    expect(vat.toString()).toBe('0.10');
+  });
 
-    it('handles fractional cents rounding correctly', () => {
-      const m = Money.fromDecimalString('0.999');
-      expect(m.toCents()).toBe(100);
-    });
+  it('keeps gross = net + vat under rounding', () => {
+    const { gross, net, vat } = Money.fromDecimalString('1.00').extractTax(20);
+    expect(net.toString()).toBe('0.83');
+    expect(vat.toString()).toBe('0.17');
+    expect(net.add(vat).equals(gross)).toBe(true);
+  });
 
-    it('handles division with very small divisor', () => {
-      const m = Money.fromCents(100);
-      expect(m.divide(0.01).toCents()).toBe(10000);
-    });
+  it('treats 0% as all-net, no VAT', () => {
+    const { net, vat } = Money.fromDecimalString('5.00').extractTax(0);
+    expect(net.toString()).toBe('5.00');
+    expect(vat.toString()).toBe('0.00');
+  });
 
-    it('handles multiplication by very small factor', () => {
-      const m = Money.fromCents(10000);
-      expect(m.multiply(0.001).toCents()).toBe(10);
-    });
+  it('throws on a negative rate', () => {
+    expect(() => Money.fromDecimalString('5.00').extractTax(-1)).toThrow(/negative/);
+  });
+});
 
-    it('allocation handles prime number split', () => {
-      const m = Money.fromCents(100);
-      const parts = m.allocate([1, 1, 1, 1, 1, 1, 1]);
-      const total = parts.reduce((sum, p) => sum + p.toCents(), 0);
-      expect(total).toBe(100);
-    });
+describe('Money — tax addition (net → gross + vat)', () => {
+  it('adds 20% VAT to a net amount', () => {
+    const { gross, net, vat } = Money.fromDecimalString('6.75').addTax(20);
+    expect(net.toString()).toBe('6.75');
+    expect(gross.toString()).toBe('8.10');
+    expect(vat.toString()).toBe('1.35');
+  });
+});
 
-    it('allocation handles weighted split with remainder', () => {
-      const m = Money.fromCents(100);
-      const [a, b] = m.allocate([1, 2]);
-      expect(a.toCents() + b.toCents()).toBe(100);
-      expect(b.toCents()).toBeGreaterThan(a.toCents());
-    });
+describe('Money — currency safety', () => {
+  it('throws when summing mixed currencies', () => {
+    const eur = Money.fromDecimalString('1.00', 'EUR');
+    // Force a foreign currency past the type system to prove the runtime guard.
+    const usd = Money.fromDecimalString('1.00', 'USD' as 'EUR');
+    expect(() => Money.sum([eur, usd])).toThrow(/different currencies/);
+  });
+});
 
-    it('handles zero in allocation ratios', () => {
-      const m = Money.fromCents(100);
-      expect(() => m.allocate([0, 0, 0])).toThrow();
-    });
-
-    it('sum handles single element', () => {
-      const amounts = [Money.fromCents(100)];
-      expect(Money.sum(amounts).toCents()).toBe(100);
-    });
-
-    it('greaterThanOrEqual handles equality', () => {
-      const a = Money.fromCents(100);
-      const b = Money.fromCents(100);
-      expect(a.greaterThanOrEqual(b)).toBe(true);
-      expect(a.lessThanOrEqual(b)).toBe(true);
-    });
-
-    it('handles string multiplication factor', () => {
-      const m = Money.fromCents(1000);
-      expect(m.multiply('2.5').toCents()).toBe(2500);
-    });
-
-    it('handles string division factor', () => {
-      const m = Money.fromCents(1000);
-      expect(m.divide('2.5').toCents()).toBe(400);
-    });
-
-    it('toDecimal returns correct value', () => {
-      const m = Money.fromCents(1234);
-      expect(m.toDecimal().toNumber()).toBe(12.34);
-    });
+describe('Money — formatting', () => {
+  it('formats as de-AT currency and number', () => {
+    const m = Money.fromDecimalString('1497.10');
+    // de-AT uses a comma decimal separator. The thousands grouping character
+    // varies by ICU (dot for currency, space for plain number here), so strip
+    // grouping separators and the symbol and assert the significant value.
+    const stripGrouping = (s: string) => s.replace(/[\s.€]/g, '');
+    expect(m.format()).toContain('€');
+    expect(stripGrouping(m.format())).toBe('1497,10');
+    expect(stripGrouping(m.formatNumber())).toBe('1497,10');
+    expect(m.toString()).toBe('1497.10');
   });
 });

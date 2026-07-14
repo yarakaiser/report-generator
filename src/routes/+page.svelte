@@ -4,7 +4,7 @@
     database: string;
     invoices: {
       count: number;
-      total: { cents: number; formatted: string };
+      total: { amount: string; formatted: string };
       financialDateSpan: { first: string | null; last: string | null };
     };
   }
